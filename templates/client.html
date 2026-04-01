@@ -221,6 +221,34 @@
     trackEvent("add_to_cart", page, productId);
   }
 
+  // ── GetDeviceType ─────────────────────
+  // Simple function to categorize device type based on screen width.
+  function getDeviceType() {
+    const ua = navigator.userAgent;
+    if (/Mobi|Android/i.test(ua)) return "mobile";
+    const width = window.innerWidth;
+    if (width < 1024) return "tablet";
+    return "desktop";
+  }
+
+  function GetBrowserInfo() {
+    const ua = navigator.userAgent;
+    if (/chrome|chromium|crios/i.test(ua)) return "Chrome";
+    if (/firefox|fxios/i.test(ua)) return "Firefox";
+    if (/safari/i.test(ua)) return "Safari";
+    if (/edg/i.test(ua)) return "Edge";
+    return "Other";
+  }
+  function GetOSInfo() {
+    const platform = navigator.platform.toLowerCase();
+    if (platform.includes("win")) return "Windows";
+    if (platform.includes("mac")) return "MacOS";
+    if (platform.includes("linux")) return "Linux";
+    if (/android/i.test(navigator.userAgent)) return "Android";
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return "iOS";
+    return "Other";
+  }
+
   // ── Core tracking function ─────────────────────────────────────
   // Sends a POST request to /track with the event details.
   // The Flask backend publishes this to Azure Event Hubs.
@@ -231,6 +259,9 @@
       product_id: productId,
       user_id:    USER_ID,
       session_id: SESSION_ID,
+      device:     getDeviceType(),
+      browser:    GetBrowserInfo(),
+      os:        GetOSInfo()
     };
 
     // Send the event to the Flask /track endpoint

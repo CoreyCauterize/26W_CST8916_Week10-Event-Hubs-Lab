@@ -13,6 +13,7 @@
 import os
 import json
 import threading
+import dotenv
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request, send_from_directory, abort
@@ -25,6 +26,9 @@ from flask_cors import CORS
 # EventData               – wraps a single event payload
 # ---------------------------------------------------------------------------
 from azure.eventhub import EventHubProducerClient, EventHubConsumerClient, EventData
+
+# Load environment variables from .env file
+dotenv.load_dotenv()
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
@@ -175,6 +179,10 @@ def track():
         "product_id": request.json.get("product_id"),
         "user_id":    request.json.get("user_id", "anonymous"),
         "timestamp":  datetime.now(timezone.utc).isoformat(),
+        "device":     request.json.get("device"),
+        "browser":    request.json.get("browser"),
+        "os":         request.json.get("os")
+
     }
 
     send_to_event_hubs(event)
