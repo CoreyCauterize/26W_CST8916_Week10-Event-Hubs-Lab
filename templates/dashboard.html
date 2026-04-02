@@ -197,6 +197,22 @@
     </div>
   </div>
 
+  <!-- Most active devices -->
+  <div class="panel">
+    <h3>Most Active Devices (last 5 mins)</h3>
+    <div id="most-devices">
+      <p style="color:#484f58; font-size:0.85rem;">Waiting for analytics...</p>
+    </div>
+  </div>
+
+  <!-- Traffic spike status -->
+  <div class="panel">
+    <h3>Traffic Spike Status (last 5 mins)</h3>
+    <div id="traffic-spikes">
+      <p style="color:#484f58; font-size:0.85rem;">Waiting for analytics...</p>
+    </div>
+  </div>
+
 </div>
 
 <footer>
@@ -228,6 +244,15 @@
       })
       .catch(err => console.error("Poll error:", err));
   }
+  function fetchAndRenderAnalytics() {
+    fetch("/api/analytics")
+      .then(res => res.json())
+      .then(data => {
+        renderMostActiveDevices(data.device_breakdown);
+        renderTrafficSpikes(data.spike_status, data.event_count);
+      })
+      .catch(err => console.error("Analytics poll error:", err));
+   }
 
   // ── KPI cards ────────────────────────────────────────────────
   function renderKPIs(data) {
@@ -282,10 +307,44 @@
       feed.appendChild(row);
     });
   }
+// ──── Most Active Devices ───────────────────────────────────────
+function renderMostActiveDevices(events) {
+  const deviceCounts = {};
+  events.forEach(e => {
+    const device = e.device || "unknown";
+    deviceCounts[device] = (deviceCounts[device] || 0) + 1;
+  });
+
+  const container = document.getElementById("most-devices");
+  if (!container) return;
+
+  const sorted = Object.entries(deviceCounts).sort((a, b) => b[1] - a[1]);
+  container.innerHTML = "";
+  sorted.forEach(([device, count]) => {
+    const row = document.createElement("div");
+    row.className = "device-row";
+    row.innerHTML = `
+      <span class="device-name">${device}</span>
+      <span class="device-count">${count}</span>
+    `;
+    container.appendChild(row);
+  });
+}
+// ── traffic spikes ───────────────────────────────────────────────
+function renderTrafficSpikes(status, count) {
+  const container = document.getElementById("traffic-spikes");
+  if (!container) return;
+  container.innerHTML = `
+    <div class="spike-status ${status}">${status.toUpperCase()}</div>
+    <div class="spike-count">${count} events/min</div>
+  `;
+}
 
   // Kick off polling immediately, then repeat
   fetchAndRender();
   setInterval(fetchAndRender, POLL_INTERVAL_MS);
+  fetchAndRenderAnalytics();
+  setInterval(fetchAndRenderAnalytics, POLL_INTERVAL_MS);
 </script>
 </body>
 </html>

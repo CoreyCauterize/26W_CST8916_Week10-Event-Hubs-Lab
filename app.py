@@ -44,11 +44,13 @@ CORS(app)
 # ---------------------------------------------------------------------------
 CONNECTION_STR = os.environ.get("EVENT_HUB_CONNECTION_STR", "")
 EVENT_HUB_NAME = os.environ.get("EVENT_HUB_NAME", "clickstream")
+EVENT_HUB_ANALYTICS_NAME = os.environ.get("EVENT_HUB_ANALYTICS_NAME", "analytics-results")
 
-# In-memory buffer: stores the last 50 events received by the consumer thread.
-# In a production system you would query a database or Azure Stream Analytics output.
-_event_buffer = []
+# In-memory buffers
+_event_buffer = []          # Raw clickstream events (for live feed + KPIs)
+_analytics_buffer = []      # Stream Analytics results (device breakdown + spikes)
 _buffer_lock = threading.Lock()
+_analytics_lock = threading.Lock()
 MAX_BUFFER = 50
 
 
@@ -96,42 +98,69 @@ def _on_event(partition_context, event):
     partition_context.update_checkpoint(event)
 
 
-def start_consumer():
-    """Start the Event Hubs consumer in a background daemon thread.
+def _on_analytics_event(partition_context, event):
+    """Callback for Stream Analytics results from the analytics Event Hub."""
+    body = event.body_as_str(encoding="UTF-8")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        data = {"raw": body}
 
-    The consumer must run on a separate thread because consumer.receive() blocks
-    forever waiting for events. Running it on the main thread would freeze Flask
-    and make the web server unable to handle any HTTP requests.
+    with _analytics_lock:
+        _analytics_buffer.append(data)
+        if len(_analytics_buffer) > MAX_BUFFER:
+            _analytics_buffer.pop(0)
+
+    partition_context.update_checkpoint(event)
+
+
+def start_consumer():
+    """Start two Event Hubs consumers in separate background daemon threads.
+
+    Thread 1: reads raw clickstream events (for the live feed + KPIs)
+    Thread 2: reads Stream Analytics output (device breakdown + spike detection)
+
+    Each consumer.receive() blocks forever, so they must run on separate threads.
     """
     if not CONNECTION_STR:
-        app.logger.warning("EVENT_HUB_CONNECTION_STR is not set – consumer thread not started")
+        app.logger.warning("EVENT_HUB_CONNECTION_STR is not set – consumer threads not started")
         return
 
-    # $Default is the built-in consumer group every Event Hub has.
-    # A consumer group is a logical "view" of the stream — multiple groups can
-    # read the same events independently (e.g. one for analytics, one for alerts).
+    # Thread 1 – raw clickstream events
     consumer = EventHubConsumerClient.from_connection_string(
         conn_str=CONNECTION_STR,
         consumer_group="$Default",
         eventhub_name=EVENT_HUB_NAME,
     )
 
-    def run():
+    def run_clickstream():
         with consumer:
-            # receive() blocks forever, calling _on_event for each new event.
-            # starting_position="-1" means "start from the beginning of the stream",
-            # not just events that arrive after this consumer connects.
             consumer.receive(
                 on_event=_on_event,
                 starting_position="-1",
             )
 
-    # daemon=True means this thread is automatically killed when the main program
-    # exits. Without it, Flask would hang on shutdown waiting for receive() to
-    # return — which it never would.
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    app.logger.info("Event Hubs consumer thread started")
+    t1 = threading.Thread(target=run_clickstream, daemon=True)
+    t1.start()
+    app.logger.info(f"Clickstream consumer started on {EVENT_HUB_NAME}")
+
+    # Thread 2 – Stream Analytics results
+    analytics_consumer = EventHubConsumerClient.from_connection_string(
+        conn_str=CONNECTION_STR,
+        consumer_group="$Default",
+        eventhub_name=EVENT_HUB_ANALYTICS_NAME,
+    )
+
+    def run_analytics():
+        with analytics_consumer:
+            analytics_consumer.receive(
+                on_event=_on_analytics_event,
+                starting_position="-1",
+            )
+
+    t2 = threading.Thread(target=run_analytics, daemon=True)
+    t2.start()
+    app.logger.info(f"Analytics consumer started on {EVENT_HUB_ANALYTICS_NAME}")
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +254,33 @@ def get_events():
 
     return jsonify({"events": recent, "summary": summary, "total": len(recent)}), 200
 
+#get analytics for spikes and device breakdown, which are polled by the dashboard to update the UI
+@app.route("/api/analytics", methods=["GET"])
+def get_analytics():
+    """Return both device breakdown and spike detection results."""
+    with _buffer_lock:
+        recent = list(_event_buffer)
+
+    # Device breakdown
+    breakdown = {}
+    for e in recent:
+        device = e.get("device", "unknown") or "unknown"
+        breakdown[device] = breakdown.get(device, 0) + 1
+
+    # Spike detection
+    count = len(recent)
+    if count >= 40:
+        status = "critical"
+    elif count >= 25:
+        status = "spike"
+    else:
+        status = "normal"
+
+    return jsonify({
+        "device_breakdown": breakdown,
+        "spike_status": status,
+        "event_count": count,
+    }), 200
 
 # ---------------------------------------------------------------------------
 # Entry point

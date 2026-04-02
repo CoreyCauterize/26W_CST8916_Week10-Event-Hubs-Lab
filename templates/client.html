@@ -233,20 +233,20 @@
 
   function GetBrowserInfo() {
     const ua = navigator.userAgent;
-    if (/chrome|chromium|crios/i.test(ua)) return "Chrome";
-    if (/firefox|fxios/i.test(ua)) return "Firefox";
-    if (/safari/i.test(ua)) return "Safari";
-    if (/edg/i.test(ua)) return "Edge";
-    return "Other";
+    if (/chrome|chromium|crios/i.test(ua)) return "chrome";
+    if (/firefox|fxios/i.test(ua)) return "firefox";
+    if (/safari/i.test(ua)) return "safari";
+    if (/edg/i.test(ua)) return "edge";
+    return "other";
   }
   function GetOSInfo() {
     const platform = navigator.platform.toLowerCase();
-    if (platform.includes("win")) return "Windows";
-    if (platform.includes("mac")) return "MacOS";
-    if (platform.includes("linux")) return "Linux";
-    if (/android/i.test(navigator.userAgent)) return "Android";
-    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return "iOS";
-    return "Other";
+    if (platform.includes("win")) return "windows";
+    if (platform.includes("mac")) return "macos";
+    if (platform.includes("linux")) return "linux";
+    if (/android/i.test(navigator.userAgent)) return "android";
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return "ios";
+    return "other";
   }
 
   // ── Core tracking function ─────────────────────────────────────
