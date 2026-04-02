@@ -255,7 +255,7 @@ def get_events():
     return jsonify({"events": recent, "summary": summary, "total": len(recent)}), 200
 
 #get analytics for spikes and device breakdown, which are polled by the dashboard to update the UI
-@app.route("/api/analytics", methods=["GET"])
+@app.route("/api/analytics", methods=["GET"]) # ai disclosure: use to recreate the buffered analytics results from the Stream Analytics output events hub.
 def get_analytics():
     """Return both device breakdown and spike detection results."""
     with _buffer_lock:
